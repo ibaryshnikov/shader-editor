@@ -1,0 +1,21 @@
+[package]
+name = "shader-editor"
+version = "0.1.0"
+authors = ["ibaryshnikov"]
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+bytemuck = "1.13.1"
+env_logger = "0.10.0"
+iced = { version = "0.10.0", features = ["tokio"] }
+iced_widget = "0.1.2"
+iced_winit = "0.10.0"
+iced_wgpu = "0.11.0"
+log = "0.4"
+notify = "6.0.1"
+wgpu-types = "=0.16.0"
+
+[dependencies.tokio]
+version = "1.29.1"
+features = ["macros", "rt-multi-thread"]
