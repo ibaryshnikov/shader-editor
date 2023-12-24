@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use iced_wgpu::graphics::Viewport;
 use iced_wgpu::{wgpu, Backend, Renderer, Settings};
-use iced_winit::core::{mouse, renderer, Color, Size};
+use iced_winit::core::{mouse, renderer, Color, Font, Pixels, Size};
 use iced_winit::runtime::{program, Debug};
 use iced_winit::{conversion, winit, Clipboard};
 use wgpu_types::TextureFormat;
@@ -19,13 +19,13 @@ use editor::Editor;
 #[derive(Debug)]
 pub enum CustomEvent {
     ShaderFileChanged,
+    UpdateShader(String),
 }
 
 struct RenderDetails {
     window: winit::window::Window,
     viewport: Viewport,
     clipboard: Clipboard,
-    instance: wgpu::Instance,
     surface: wgpu::Surface,
     #[allow(unused)]
     adapter: wgpu::Adapter,
@@ -53,10 +53,9 @@ async fn init_wgpu(event_loop: &EventLoop<CustomEvent>) -> Result<RenderDetails>
 
     let surface = unsafe { instance.create_surface(&window)? };
 
-    let adapter =
-        wgpu::util::initialize_adapter_from_env_or_default(&instance, backends, Some(&surface))
-            .await
-            .ok_or_else(|| anyhow!("Adapter not found"))?;
+    let adapter = wgpu::util::initialize_adapter_from_env_or_default(&instance, Some(&surface))
+        .await
+        .ok_or_else(|| anyhow!("Adapter not found"))?;
 
     let adapter_info = adapter.get_info();
     println!("Using {} ({:?})", adapter_info.name, adapter_info.backend);
@@ -110,7 +109,6 @@ async fn init_wgpu(event_loop: &EventLoop<CustomEvent>) -> Result<RenderDetails>
         window,
         viewport,
         clipboard,
-        instance,
         surface,
         adapter,
         device,
@@ -131,7 +129,6 @@ async fn main() {
         window,
         mut viewport,
         mut clipboard,
-        instance,
         surface,
         device,
         queue,
@@ -156,7 +153,11 @@ async fn main() {
     watch::init(event_loop_proxy);
 
     let mut debug = Debug::new();
-    let mut renderer = Renderer::new(Backend::new(&device, &queue, Settings::default(), format));
+    let mut renderer = Renderer::new(
+        Backend::new(&device, &queue, Settings::default(), format),
+        Font::default(),
+        Pixels(16.0),
+    );
 
     let mut state =
         program::State::new(controls, viewport.logical_size(), &mut renderer, &mut debug);
@@ -191,13 +192,26 @@ async fn main() {
                     WindowEvent::KeyboardInput {
                         input:
                             winit::event::KeyboardInput {
+                                virtual_keycode: Some(winit::event::VirtualKeyCode::F12),
+                                state: winit::event::ElementState::Pressed,
+                                ..
+                            },
+                        ..
+                    } => {
+                        debug.toggle();
+                    }
+                    WindowEvent::KeyboardInput {
+                        input:
+                            winit::event::KeyboardInput {
                                 virtual_keycode: Some(winit::event::VirtualKeyCode::R),
                                 state: winit::event::ElementState::Pressed,
                                 ..
                             },
                         ..
                     } => {
-                        println!("{:#?}", instance.generate_report());
+                        if modifiers.ctrl() {
+                            state.queue_message(controls::Message::UpdateShader);
+                        }
                     }
                     WindowEvent::Resized(size) => {
                         resized = true;
@@ -234,6 +248,9 @@ async fn main() {
                     editor.update_rectangle_shader(&device, &config);
                     window.request_redraw();
                 }
+                CustomEvent::UpdateShader(text) => {
+                    editor.update_rectangle_shader_with_text(&device, &config, &text);
+                }
             },
             Event::MainEventsCleared => {
                 if state.is_queue_empty() {
@@ -250,7 +267,7 @@ async fn main() {
                     &mut renderer,
                     &iced_winit::style::Theme::Dark,
                     &renderer::Style {
-                        text_color: Color::WHITE,
+                        text_color: Color::new(0.0, 0.6, 0.6, 1.0),
                     },
                     &mut clipboard,
                     &mut debug,

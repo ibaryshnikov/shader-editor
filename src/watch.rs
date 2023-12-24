@@ -12,7 +12,7 @@ pub fn init(event_loop_proxy: EventLoopProxy<CustomEvent>) {
         let mut watcher = RecommendedWatcher::new(tx, Config::default()).unwrap();
 
         watcher
-            .watch("./src/shader.wgsl".as_ref(), RecursiveMode::Recursive)
+            .watch("./shader.wgsl".as_ref(), RecursiveMode::Recursive)
             .unwrap();
 
         for res in rx {

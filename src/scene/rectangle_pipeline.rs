@@ -14,12 +14,15 @@ const VERTEX_SIZE: usize = std::mem::size_of::<TrianglePoint>();
 
 impl PipelineData {
     pub fn new(device: &Device, config: &SurfaceConfiguration) -> Self {
-        let shader_text =
-            std::fs::read_to_string("src/shader.wgsl").expect("Should read the shader");
+        let shader_text = std::fs::read_to_string("shader.wgsl").expect("Should read the shader");
 
+        Self::new_with_text(device, config, &shader_text)
+    }
+
+    pub fn new_with_text(device: &Device, config: &SurfaceConfiguration, text: &str) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,
-            source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(&shader_text)),
+            source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(text)),
         });
 
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {

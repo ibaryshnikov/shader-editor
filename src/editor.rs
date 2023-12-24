@@ -57,4 +57,14 @@ impl Editor {
     pub fn update_rectangle_shader(&mut self, device: &Device, config: &SurfaceConfiguration) {
         self.rectangle_pipeline_data = rectangle_pipeline::PipelineData::new(device, config);
     }
+
+    pub fn update_rectangle_shader_with_text(
+        &mut self,
+        device: &Device,
+        config: &SurfaceConfiguration,
+        text: &str,
+    ) {
+        self.rectangle_pipeline_data =
+            rectangle_pipeline::PipelineData::new_with_text(device, config, text);
+    }
 }

@@ -8,13 +8,13 @@ edition = "2021"
 anyhow = "1.0"
 bytemuck = "1.13.1"
 env_logger = "0.10.0"
-iced = { version = "0.10.0", features = ["tokio"] }
-iced_widget = "0.1.2"
-iced_winit = "0.10.0"
-iced_wgpu = "0.11.0"
+iced = { git = "https://github.com/iced-rs/iced.git", rev = "refs/tags/text-editor", features = ["tokio", "debug"] }
+iced_widget = { git = "https://github.com/iced-rs/iced.git", rev = "refs/tags/text-editor" }
+iced_winit = { git = "https://github.com/iced-rs/iced.git", rev = "refs/tags/text-editor" }
+iced_wgpu = { git = "https://github.com/iced-rs/iced.git", rev = "refs/tags/text-editor" }
 log = "0.4"
 notify = "6.0.1"
-wgpu-types = "=0.16.0"
+wgpu-types = "=0.17.0"
 
 [dependencies.tokio]
 version = "1.29.1"
