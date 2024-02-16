@@ -17,8 +17,6 @@ impl Editor {
         }
     }
 
-    pub fn resize(&self, _config: &SurfaceConfiguration, _queue: &Queue) {}
-
     pub fn render(&self, view: &wgpu::TextureView, device: &Device, queue: &Queue) {
         device.push_error_scope(wgpu::ErrorFilter::Validation);
         let mut encoder =
@@ -36,10 +34,12 @@ impl Editor {
                         b: 0.3,
                         a: 1.0,
                     }),
-                    store: true,
+                    store: wgpu::StoreOp::Store,
                 },
             })],
             depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
         });
 
         self.scene.render(&self.rectangle_pipeline_data, &mut rpass);

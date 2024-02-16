@@ -1,8 +1,5 @@
 use iced_wgpu::Renderer;
-use iced_widget::{
-    button, container, horizontal_space, text, text_editor, Column, Row, TextEditor,
-};
-use iced_winit::core::text::highlighter;
+use iced_widget::{button, container, horizontal_space, text, text_editor, Column, Row};
 use iced_winit::core::{Element, Length};
 use iced_winit::runtime::{Command, Program};
 use iced_winit::style::Theme;
@@ -27,7 +24,7 @@ pub enum Message {
 
 impl Controls {
     pub fn new(event_loop_proxy: EventLoopProxy<CustomEvent>) -> Controls {
-        let content = text_editor::Content::with(include_str!("../shader.wgsl"));
+        let content = text_editor::Content::with_text(include_str!("../shader.wgsl"));
         Controls {
             event_loop_proxy,
             content,
@@ -37,13 +34,14 @@ impl Controls {
 }
 
 impl Program for Controls {
-    type Renderer = Renderer<Theme>;
+    type Renderer = Renderer;
+    type Theme = Theme;
     type Message = Message;
 
     fn update(&mut self, message: Message) -> Command<Message> {
         match message {
             Message::Edit(action) => {
-                self.content.edit(action);
+                self.content.perform(action);
             }
             Message::UpdateShader => {
                 let shader_text = self.content.text();
@@ -59,18 +57,15 @@ impl Program for Controls {
         Command::none()
     }
 
-    fn view(&self) -> Element<'_, Message, Renderer<Theme>> {
+    fn view(&self) -> Element<Message, Theme, Renderer> {
         let position = {
             let (line, column) = self.content.cursor_position();
             text(format!("{}:{}", line + 1, column + 1))
         };
 
-        let editor: TextEditor<'_, highlighter::PlainText, Message, Self::Renderer> =
-            TextEditor::new(&self.content).on_edit(Message::Edit);
+        let editor = text_editor(&self.content).on_action(Message::Edit);
 
-        let status_bar = Row::new()
-            .push(horizontal_space(Length::Fill))
-            .push(position);
+        let status_bar = Row::new().push(horizontal_space()).push(position);
 
         let control_buttons = Row::new()
             .push(

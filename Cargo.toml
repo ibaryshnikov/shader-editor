@@ -6,16 +6,19 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0"
-bytemuck = "1.13.1"
-env_logger = "0.10.0"
-iced = { git = "https://github.com/iced-rs/iced.git", rev = "refs/tags/text-editor", features = ["tokio", "debug"] }
-iced_widget = { git = "https://github.com/iced-rs/iced.git", rev = "refs/tags/text-editor" }
-iced_winit = { git = "https://github.com/iced-rs/iced.git", rev = "refs/tags/text-editor" }
-iced_wgpu = { git = "https://github.com/iced-rs/iced.git", rev = "refs/tags/text-editor" }
+bytemuck = "1.14"
+env_logger = "0.11"
+iced_widget = "0.12"
+iced_winit = "0.12"
+iced_wgpu = "0.12"
 log = "0.4"
-notify = "6.0.1"
-wgpu-types = "=0.17.0"
+notify = "6.1.1"
+wgpu-types = "0.19"
+
+[dependencies.iced]
+version = "0.12"
+features = ["highlighter", "tokio", "debug"]
 
 [dependencies.tokio]
-version = "1.29.1"
+version = "1.36"
 features = ["macros", "rt-multi-thread"]
