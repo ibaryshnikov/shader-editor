@@ -10,7 +10,7 @@ use iced_winit::{conversion, winit, Clipboard};
 use wgpu_types::TextureFormat;
 use winit::event::{ElementState, Event, KeyEvent, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop, EventLoopBuilder};
-use winit::keyboard::{Key, ModifiersState, NamedKey};
+use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
 use winit::window::Window;
 
 mod controls;
@@ -191,22 +191,22 @@ async fn main() -> Result<()> {
                     WindowEvent::KeyboardInput {
                         event:
                             KeyEvent {
-                                logical_key: ref key,
+                                physical_key,
                                 state: ElementState::Pressed,
                                 ..
                             },
                         ..
-                    } => match key.as_ref() {
-                        Key::Named(NamedKey::Escape) => {
+                    } => match physical_key {
+                        PhysicalKey::Code(KeyCode::Escape) => {
                             window_target.exit();
                         }
-                        Key::Character("R" | "r") => {
+                        PhysicalKey::Code(KeyCode::KeyR) => {
                             if modifiers.control_key() {
                                 state.queue_message(controls::Message::UpdateShader);
                                 return;
                             }
                         }
-                        Key::Named(NamedKey::F12) => {
+                        PhysicalKey::Code(KeyCode::F12) => {
                             debug.toggle();
                         }
                         _ => (),
@@ -324,7 +324,7 @@ async fn main() -> Result<()> {
                     .map(mouse::Cursor::Available)
                     .unwrap_or(mouse::Cursor::Unavailable),
                 &mut renderer,
-                &Theme::Dark,
+                &Theme::KanagawaWave,
                 &renderer::Style {
                     text_color: Color::WHITE,
                 },
