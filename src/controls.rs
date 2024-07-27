@@ -1,3 +1,4 @@
+use iced::highlighter::{self, Highlighter};
 use iced_wgpu::Renderer;
 use iced_widget::{button, container, horizontal_space, text, text_editor, Column, Row};
 use iced_winit::core::{Element, Length};
@@ -63,7 +64,15 @@ impl Program for Controls {
             text(format!("{}:{}", line + 1, column + 1))
         };
 
-        let editor = text_editor(&self.content).on_action(Message::Edit);
+        let editor = text_editor(&self.content)
+            .on_action(Message::Edit)
+            .highlight::<Highlighter>(
+                highlighter::Settings {
+                    theme: highlighter::Theme::SolarizedDark,
+                    extension: "rs".to_string(),
+                },
+                |highlighter, _theme| highlighter.to_format(),
+            );
 
         let status_bar = Row::new().push(horizontal_space()).push(position);
 
