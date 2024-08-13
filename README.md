@@ -40,7 +40,3 @@ The implementation is based on the following examples:
 
 Using [notify](https://github.com/notify-rs/notify)
 for file watching.
-
-## License
-
-MIT or Apache-2.0
