@@ -1,4 +1,4 @@
-use iced_wgpu::wgpu::{self, Device, Queue, SurfaceConfiguration};
+use iced_wgpu::wgpu::{self, Device, SurfaceConfiguration};
 
 use crate::scene::{rectangle_pipeline, Scene};
 
@@ -16,24 +16,14 @@ impl Editor {
             rectangle_pipeline_data,
         }
     }
-
-    pub fn render(&self, view: &wgpu::TextureView, device: &Device, queue: &Queue) {
-        device.push_error_scope(wgpu::ErrorFilter::Validation);
-        let mut encoder =
-            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-
-        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+    pub fn render(&self, view: &wgpu::TextureView, encoder: &mut wgpu::CommandEncoder) {
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: None,
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.1,
-                        g: 0.2,
-                        b: 0.3,
-                        a: 1.0,
-                    }),
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                     store: wgpu::StoreOp::Store,
                 },
             })],
@@ -42,16 +32,8 @@ impl Editor {
             occlusion_query_set: None,
         });
 
-        self.scene.render(&self.rectangle_pipeline_data, &mut rpass);
-        drop(rpass);
-
-        queue.submit(Some(encoder.finish()));
-        let future = device.pop_error_scope();
-        tokio::spawn(async move {
-            if let Some(error) = future.await {
-                panic!("Rendering error: {}", error);
-            }
-        });
+        self.scene
+            .render(&self.rectangle_pipeline_data, &mut render_pass);
     }
 
     pub fn update_rectangle_shader(&mut self, device: &Device, config: &SurfaceConfiguration) {

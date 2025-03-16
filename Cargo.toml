@@ -5,20 +5,28 @@ authors = ["ibaryshnikov"]
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0"
-bytemuck = "1.16"
-env_logger = "0.11"
-iced_widget = "0.12"
-iced_winit = "0.12"
-iced_wgpu = "0.12"
-log = "0.4"
+bytemuck = "1.22"
+futures = "0.3.31"
 notify = "6.1.1"
-wgpu-types = "0.19"
+wgpu-types = "24.0.0"
 
 [dependencies.iced]
-version = "0.12"
+# version = "0.14"
+git = "https://github.com/iced-rs/iced.git"
+rev = "fd5ed0d"
 features = ["highlighter", "tokio", "debug", "advanced"]
 
-[dependencies.tokio]
-version = "1.39"
-features = ["macros", "rt-multi-thread"]
+[dependencies.iced_widget]
+# version = "0.14"
+git = "https://github.com/iced-rs/iced.git"
+rev = "fd5ed0d"
+
+[dependencies.iced_wgpu]
+# version = "0.14"
+git = "https://github.com/iced-rs/iced.git"
+rev = "fd5ed0d"
+
+[dependencies.iced_winit]
+# version = "0.14"
+git = "https://github.com/iced-rs/iced.git"
+rev = "fd5ed0d"

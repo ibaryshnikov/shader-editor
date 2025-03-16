@@ -1,9 +1,8 @@
-use iced::highlighter::{self, Highlighter};
+use iced::highlighter;
 use iced_wgpu::Renderer;
 use iced_widget::{button, container, horizontal_space, text, text_editor, Column, Row};
-use iced_winit::core::{Element, Length};
-use iced_winit::runtime::{Command, Program};
-use iced_winit::style::Theme;
+use iced_winit::core::{Element, Length, Theme};
+use iced_winit::runtime::{Program, Task};
 use iced_winit::winit;
 use winit::event_loop::EventLoopProxy;
 
@@ -39,7 +38,7 @@ impl Program for Controls {
     type Theme = Theme;
     type Message = Message;
 
-    fn update(&mut self, message: Message) -> Command<Message> {
+    fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Edit(action) => {
                 self.content.perform(action);
@@ -55,7 +54,7 @@ impl Program for Controls {
                 self.editor_visible = !self.editor_visible;
             }
         }
-        Command::none()
+        Task::none()
     }
 
     fn view(&self) -> Element<Message, Theme, Renderer> {
@@ -66,13 +65,7 @@ impl Program for Controls {
 
         let editor = text_editor(&self.content)
             .on_action(Message::Edit)
-            .highlight::<Highlighter>(
-                highlighter::Settings {
-                    theme: highlighter::Theme::SolarizedDark,
-                    extension: "rs".to_string(),
-                },
-                |highlighter, _theme| highlighter.to_format(),
-            );
+            .highlight("rs", highlighter::Theme::SolarizedDark);
 
         let status_bar = Row::new().push(horizontal_space()).push(position);
 
@@ -80,12 +73,14 @@ impl Program for Controls {
             .push(
                 button("Toggle editor")
                     .on_press(Message::ToggleEditor)
-                    .width(Length::Fill),
+                    .width(Length::Fill)
+                    .style(button::secondary),
             )
             .push(
                 button("Update shader")
                     .on_press(Message::UpdateShader)
-                    .width(Length::Fill),
+                    .width(Length::Fill)
+                    .style(button::secondary),
             )
             .spacing(1)
             .padding(1);
@@ -96,6 +91,10 @@ impl Program for Controls {
             column = column.push(editor).push(status_bar);
         }
 
-        container(column).width(400).into()
+        container(column).width(400).style(add_background).into()
     }
+}
+
+fn add_background(theme: &Theme) -> container::Style {
+    theme.palette().background.into()
 }

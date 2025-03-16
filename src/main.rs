@@ -1,15 +1,14 @@
 use std::sync::Arc;
 
-use anyhow::{anyhow, Result};
 use iced_wgpu::graphics::Viewport;
-use iced_wgpu::{wgpu, Backend, Renderer, Settings};
-use iced_winit::core::{mouse, renderer, window, Color, Font, Pixels, Size};
+use iced_wgpu::{wgpu, Engine, Renderer};
+use iced_winit::core::{mouse, renderer, Font, Pixels, Size, Theme};
 use iced_winit::runtime::{program, Debug};
-use iced_winit::style::Theme;
 use iced_winit::{conversion, winit, Clipboard};
 use wgpu_types::TextureFormat;
-use winit::event::{ElementState, Event, KeyEvent, WindowEvent};
-use winit::event_loop::{ControlFlow, EventLoop, EventLoopBuilder};
+use winit::application::ApplicationHandler;
+use winit::event::{ElementState, KeyEvent, WindowEvent};
+use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
 use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
 use winit::window::Window;
 
@@ -27,71 +26,290 @@ pub enum CustomEvent {
     UpdateShader(String),
 }
 
-struct RenderDetails<'window> {
+struct App {
+    event_loop_proxy: EventLoopProxy<CustomEvent>,
+    app_data: Option<AppData>,
+    resized: bool,
+    cursor_position: Option<winit::dpi::PhysicalPosition<f64>>,
+    modifiers: ModifiersState,
+}
+
+impl App {
+    fn new(event_loop_proxy: EventLoopProxy<CustomEvent>) -> App {
+        let modifiers = ModifiersState::default();
+        App {
+            event_loop_proxy,
+            app_data: None,
+            resized: false,
+            cursor_position: None,
+            modifiers,
+        }
+    }
+}
+
+struct AppData {
     window: Arc<Window>,
     viewport: Viewport,
     clipboard: Clipboard,
-    surface: wgpu::Surface<'window>,
+    surface: wgpu::Surface<'static>,
     #[allow(unused)]
     adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
     format: TextureFormat,
     config: wgpu::SurfaceConfiguration,
+    editor: Editor,
+    engine: Engine,
+    renderer: Renderer,
+    state: program::State<Controls>,
+    debug: Debug,
 }
 
-async fn init_wgpu<'window>(event_loop: &EventLoop<CustomEvent>) -> Result<RenderDetails<'window>> {
-    let window = Window::new(event_loop)?;
+impl ApplicationHandler<CustomEvent> for App {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        if self.app_data.is_some() {
+            println!("Already initialized, skipping");
+            return;
+        }
+        let app_data = init_app(event_loop, self.event_loop_proxy.clone());
+        self.app_data = Some(app_data);
+    }
+
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: CustomEvent) {
+        let Some(app_data) = &mut self.app_data else {
+            return;
+        };
+        match event {
+            CustomEvent::ShaderFileChanged => {
+                app_data
+                    .editor
+                    .update_rectangle_shader(&app_data.device, &app_data.config);
+                app_data.window.request_redraw();
+            }
+            CustomEvent::UpdateShader(text) => {
+                app_data.editor.update_rectangle_shader_with_text(
+                    &app_data.device,
+                    &app_data.config,
+                    &text,
+                );
+            }
+        }
+    }
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        _window_id: winit::window::WindowId,
+        event: WindowEvent,
+    ) {
+        let Some(app_data) = self.app_data.as_mut() else {
+            return;
+        };
+        let AppData {
+            window,
+            clipboard,
+            surface,
+            device,
+            queue,
+            format,
+            editor,
+            engine,
+            renderer,
+            state,
+            debug,
+            ..
+        } = app_data;
+
+        match event {
+            WindowEvent::CursorMoved { position, .. } => {
+                self.cursor_position = Some(position);
+            }
+            WindowEvent::ModifiersChanged(modifiers) => {
+                self.modifiers = modifiers.state();
+            }
+            WindowEvent::KeyboardInput {
+                event:
+                    KeyEvent {
+                        physical_key,
+                        state: ElementState::Pressed,
+                        ..
+                    },
+                ..
+            } => match physical_key {
+                PhysicalKey::Code(KeyCode::Escape) => {
+                    event_loop.exit();
+                }
+                PhysicalKey::Code(KeyCode::KeyR) => {
+                    if self.modifiers.control_key() {
+                        state.queue_message(controls::Message::UpdateShader);
+                        return;
+                    }
+                }
+                PhysicalKey::Code(KeyCode::F12) => {
+                    debug.toggle();
+                }
+                _ => (),
+            },
+            WindowEvent::Resized(_) => {
+                self.resized = true;
+            }
+            WindowEvent::CloseRequested => {
+                event_loop.exit();
+            }
+            WindowEvent::RedrawRequested => {
+                if self.resized {
+                    let size = window.inner_size();
+
+                    app_data.viewport = Viewport::with_physical_size(
+                        Size::new(size.width, size.height),
+                        window.scale_factor(),
+                    );
+
+                    surface.configure(
+                        device,
+                        &wgpu::SurfaceConfiguration {
+                            format: *format,
+                            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                            width: size.width,
+                            height: size.height,
+                            present_mode: wgpu::PresentMode::AutoVsync,
+                            alpha_mode: wgpu::CompositeAlphaMode::Auto,
+                            view_formats: vec![],
+                            desired_maximum_frame_latency: 2,
+                        },
+                    );
+
+                    self.resized = false;
+                }
+
+                match surface.get_current_texture() {
+                    Ok(frame) => {
+                        let mut encoder =
+                            device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                                label: None,
+                            });
+
+                        let view = frame
+                            .texture
+                            .create_view(&wgpu::TextureViewDescriptor::default());
+
+                        editor.render(&view, &mut encoder);
+
+                        renderer.present(
+                            engine,
+                            device,
+                            queue,
+                            &mut encoder,
+                            None,
+                            frame.texture.format(),
+                            &view,
+                            &app_data.viewport,
+                            &debug.overlay(),
+                        );
+
+                        engine.submit(queue, encoder);
+                        frame.present();
+
+                        window.set_cursor(conversion::mouse_interaction(state.mouse_interaction()));
+                    }
+                    Err(error) => match error {
+                        wgpu::SurfaceError::OutOfMemory => {
+                            panic!("Swapchain error: {error}. Rendering cannot continue.");
+                        }
+                        _ => {
+                            window.request_redraw();
+                        }
+                    },
+                }
+            }
+            _ => (),
+        }
+
+        if let Some(event) = conversion::window_event(event, window.scale_factor(), self.modifiers)
+        {
+            state.queue_event(event);
+        }
+
+        if state.is_queue_empty() {
+            return;
+        }
+        let theme = Theme::SolarizedDark;
+        let _ = state.update(
+            app_data.viewport.logical_size(),
+            self.cursor_position
+                .map(|p| conversion::cursor_position(p, app_data.viewport.scale_factor()))
+                .map(mouse::Cursor::Available)
+                .unwrap_or(mouse::Cursor::Unavailable),
+            renderer,
+            &theme,
+            &renderer::Style {
+                text_color: theme.palette().text,
+            },
+            clipboard,
+            debug,
+        );
+
+        window.request_redraw();
+    }
+}
+
+fn init_app(
+    event_loop: &ActiveEventLoop,
+    event_loop_proxy: EventLoopProxy<CustomEvent>,
+) -> AppData {
+    let window = event_loop
+        .create_window(winit::window::WindowAttributes::default())
+        .expect("Should create window");
 
     let window = Arc::new(window);
 
     window.set_title("Shader editor");
 
-    log::info!("Initializing the surface...");
-
-    let backends = wgpu::util::backend_bits_from_env().unwrap_or_else(wgpu::Backends::all);
-    let dx12_shader_compiler = wgpu::util::dx12_shader_compiler_from_env().unwrap_or_default();
+    println!("Initializing the surface...");
 
     let physical_size = window.inner_size();
 
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends,
-        dx12_shader_compiler,
-        ..Default::default()
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::from_env_or_default());
+
+    let surface = instance
+        .create_surface(window.clone())
+        .expect("Should create surface");
+
+    let (format, adapter, device, queue) = futures::executor::block_on(async {
+        let adapter = wgpu::util::initialize_adapter_from_env_or_default(&instance, Some(&surface))
+            .await
+            .expect("Adapter not found");
+
+        let adapter_info = adapter.get_info();
+        println!("Using {} ({:?})", adapter_info.name, adapter_info.backend);
+
+        let adapter_features = adapter.features();
+        let needed_limits = wgpu::Limits::default();
+        let capabilities = surface.get_capabilities(&adapter);
+
+        let format = capabilities
+            .formats
+            .iter()
+            .filter(|format| format.is_srgb())
+            .copied()
+            .next()
+            .or_else(|| capabilities.formats.first().copied())
+            .expect("Format not found");
+
+        let (device, queue) = adapter
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    label: None,
+                    required_features: adapter_features & wgpu::Features::default(),
+                    required_limits: needed_limits,
+                    memory_hints: wgpu::MemoryHints::MemoryUsage,
+                },
+                None,
+            )
+            .await
+            .expect("Device not found");
+
+        (format, adapter, device, queue)
     });
-
-    let surface = instance.create_surface(window.clone())?;
-
-    let adapter = wgpu::util::initialize_adapter_from_env_or_default(&instance, Some(&surface))
-        .await
-        .ok_or_else(|| anyhow!("Adapter not found"))?;
-
-    let adapter_info = adapter.get_info();
-    println!("Using {} ({:?})", adapter_info.name, adapter_info.backend);
-
-    let adapter_features = adapter.features();
-    let needed_limits = wgpu::Limits::default();
-    let capabilities = surface.get_capabilities(&adapter);
-
-    let format = capabilities
-        .formats
-        .iter()
-        .filter(|format| format.is_srgb())
-        .copied()
-        .next()
-        .or_else(|| capabilities.formats.first().copied())
-        .ok_or_else(|| anyhow!("Format not found"))?;
-
-    let (device, queue) = adapter
-        .request_device(
-            &wgpu::DeviceDescriptor {
-                label: None,
-                required_features: adapter_features & wgpu::Features::default(),
-                required_limits: needed_limits,
-            },
-            None,
-        )
-        .await?;
 
     let mut config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -113,9 +331,19 @@ async fn init_wgpu<'window>(event_loop: &EventLoop<CustomEvent>) -> Result<Rende
         Size::new(physical_size.width, physical_size.height),
         window.scale_factor(),
     );
-    let clipboard = Clipboard::connect(&window);
+    let clipboard = Clipboard::connect(window.clone());
 
-    let details = RenderDetails {
+    let editor = Editor::init(&config, &device);
+
+    let controls = Controls::new(event_loop_proxy);
+
+    let mut debug = Debug::new();
+    let engine = Engine::new(&adapter, &device, &queue, format, None);
+    let mut renderer = Renderer::new(&device, &engine, Font::default(), Pixels(16.0));
+
+    let state = program::State::new(controls, viewport.logical_size(), &mut renderer, &mut debug);
+
+    AppData {
         window,
         viewport,
         clipboard,
@@ -125,217 +353,28 @@ async fn init_wgpu<'window>(event_loop: &EventLoop<CustomEvent>) -> Result<Rende
         queue,
         format,
         config,
-    };
-    Ok(details)
+
+        editor,
+
+        engine,
+        renderer,
+        state,
+        debug,
+    }
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    env_logger::init();
-
-    let event_loop = EventLoopBuilder::<CustomEvent>::with_user_event().build()?;
-
-    let RenderDetails {
-        window,
-        mut viewport,
-        mut clipboard,
-        surface,
-        device,
-        queue,
-        format,
-        config,
-        ..
-    } = init_wgpu(&event_loop)
-        .await
-        .expect("Should initialize wgpu details");
-
-    log::info!("Initializing...");
-    let mut editor = Editor::init(&config, &device);
-
-    let mut resized = false;
-
-    let mut staging_belt = wgpu::util::StagingBelt::new(5 * 1024);
+fn main() {
+    let event_loop = EventLoop::with_user_event()
+        .build()
+        .expect("Should build event loop");
 
     let event_loop_proxy = event_loop.create_proxy();
-    let controls = Controls::new(event_loop_proxy.clone());
+
+    let mut app = App::new(event_loop_proxy.clone());
 
     // watch for shader changes
     watch::init(event_loop_proxy);
 
-    let mut debug = Debug::new();
-    let mut renderer = Renderer::new(
-        Backend::new(&device, &queue, Settings::default(), format),
-        Font::default(),
-        Pixels(16.0),
-    );
-
-    let mut state =
-        program::State::new(controls, viewport.logical_size(), &mut renderer, &mut debug);
-
-    let mut cursor_position = None;
-    let mut modifiers = ModifiersState::default();
-
-    log::info!("Entering render loop...");
-    event_loop.run(move |event, window_target| {
-        window_target.set_control_flow(ControlFlow::Wait);
-
-        match event {
-            Event::WindowEvent { event, .. } => {
-                match event {
-                    WindowEvent::CursorMoved { position, .. } => {
-                        cursor_position = Some(position);
-                    }
-                    WindowEvent::ModifiersChanged(new_modifiers) => {
-                        modifiers = new_modifiers.state();
-                    }
-                    WindowEvent::KeyboardInput {
-                        event:
-                            KeyEvent {
-                                physical_key,
-                                state: ElementState::Pressed,
-                                ..
-                            },
-                        ..
-                    } => match physical_key {
-                        PhysicalKey::Code(KeyCode::Escape) => {
-                            window_target.exit();
-                        }
-                        PhysicalKey::Code(KeyCode::KeyR) => {
-                            if modifiers.control_key() {
-                                state.queue_message(controls::Message::UpdateShader);
-                                return;
-                            }
-                        }
-                        PhysicalKey::Code(KeyCode::F12) => {
-                            debug.toggle();
-                        }
-                        _ => (),
-                    },
-                    WindowEvent::Resized(_) => {
-                        resized = true;
-                    }
-                    WindowEvent::CloseRequested => {
-                        window_target.exit();
-                    }
-                    WindowEvent::RedrawRequested => {
-                        if resized {
-                            let size = window.inner_size();
-
-                            viewport = Viewport::with_physical_size(
-                                Size::new(size.width, size.height),
-                                window.scale_factor(),
-                            );
-
-                            surface.configure(
-                                &device,
-                                &wgpu::SurfaceConfiguration {
-                                    format,
-                                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                                    width: size.width,
-                                    height: size.height,
-                                    present_mode: wgpu::PresentMode::AutoVsync,
-                                    alpha_mode: wgpu::CompositeAlphaMode::Auto,
-                                    view_formats: vec![],
-                                    desired_maximum_frame_latency: 2,
-                                },
-                            );
-
-                            resized = false;
-                        }
-
-                        match surface.get_current_texture() {
-                            Ok(frame) => {
-                                let mut encoder = device.create_command_encoder(
-                                    &wgpu::CommandEncoderDescriptor { label: None },
-                                );
-
-                                let view =
-                                    frame.texture.create_view(&wgpu::TextureViewDescriptor {
-                                        format: Some(format),
-                                        ..wgpu::TextureViewDescriptor::default()
-                                    });
-
-                                editor.render(&view, &device, &queue);
-
-                                renderer.with_primitives(|backend, primitive| {
-                                    backend.present(
-                                        &device,
-                                        &queue,
-                                        &mut encoder,
-                                        None,
-                                        frame.texture.format(),
-                                        &view,
-                                        primitive,
-                                        &viewport,
-                                        &debug.overlay(),
-                                    );
-                                });
-
-                                staging_belt.finish();
-                                queue.submit(Some(encoder.finish()));
-                                frame.present();
-
-                                window.set_cursor_icon(conversion::mouse_interaction(
-                                    state.mouse_interaction(),
-                                ));
-
-                                staging_belt.recall();
-                            }
-                            Err(error) => match error {
-                                wgpu::SurfaceError::OutOfMemory => {
-                                    panic!("Swapchain error: {error}. Rendering cannot continue.");
-                                }
-                                _ => {
-                                    // Try rendering again next frame.
-                                    window.request_redraw();
-                                }
-                            },
-                        }
-                    }
-                    _ => (),
-                }
-
-                if let Some(event) = conversion::window_event(
-                    window::Id::MAIN,
-                    event,
-                    window.scale_factor(),
-                    modifiers,
-                ) {
-                    state.queue_event(event);
-                }
-            }
-            Event::UserEvent(custom_event) => match custom_event {
-                CustomEvent::ShaderFileChanged => {
-                    editor.update_rectangle_shader(&device, &config);
-                    window.request_redraw();
-                }
-                CustomEvent::UpdateShader(text) => {
-                    editor.update_rectangle_shader_with_text(&device, &config, &text);
-                }
-            },
-            _ => (),
-        }
-
-        if !state.is_queue_empty() {
-            let _ = state.update(
-                viewport.logical_size(),
-                cursor_position
-                    .map(|p| conversion::cursor_position(p, viewport.scale_factor()))
-                    .map(mouse::Cursor::Available)
-                    .unwrap_or(mouse::Cursor::Unavailable),
-                &mut renderer,
-                &Theme::KanagawaWave,
-                &renderer::Style {
-                    text_color: Color::WHITE,
-                },
-                &mut clipboard,
-                &mut debug,
-            );
-
-            // and request a redraw
-            window.request_redraw();
-        }
-    })?;
-
-    Ok(())
+    println!("Entering render loop...");
+    event_loop.run_app(&mut app).expect("Should run event loop");
 }
