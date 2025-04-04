@@ -1,4 +1,3 @@
-use iced::highlighter;
 use iced_wgpu::Renderer;
 use iced_widget::{button, container, horizontal_space, text, text_editor, Column, Row};
 use iced_winit::core::{Element, Length, Theme};
@@ -6,6 +5,7 @@ use iced_winit::runtime::{Program, Task};
 use iced_winit::winit;
 use winit::event_loop::EventLoopProxy;
 
+use crate::highlighter;
 use crate::CustomEvent;
 
 pub struct Controls {
@@ -65,7 +65,13 @@ impl Program for Controls {
 
         let editor = text_editor(&self.content)
             .on_action(Message::Edit)
-            .highlight("rs", highlighter::Theme::SolarizedDark);
+            .highlight_with::<highlighter::Highlighter>(
+                highlighter::Settings {
+                    theme: highlighter::Theme::SolarizedDark,
+                    token: "wgsl".to_owned(),
+                },
+                |highlight, _theme| highlight.to_format(),
+            );
 
         let status_bar = Row::new().push(horizontal_space()).push(position);
 

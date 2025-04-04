@@ -4,6 +4,8 @@ A minimal WebGPU application which can run your WGSL shaders.
 Built with iced, providing the ability to add some UI on top
 of the rendered image.
 
+Syntax highlight is kindly borrowed from [halo](https://github.com/bungoboingo/halo)
+
 ## Motivation
 
 The main goal is to provide a quick way to develop shaders with
@@ -28,7 +30,7 @@ File watcher:
 - [x] Watch shader file and do hot reload on changes
 - [ ] Menu dialog to open shader files
 - [x] Multiline text editor for shaders
-- [ ] Syntax highlight
+- [x] Syntax highlight
 - [ ] Show error position inside editor
 
 ## Details

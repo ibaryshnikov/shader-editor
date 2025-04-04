@@ -14,6 +14,7 @@ use winit::window::Window;
 
 mod controls;
 mod editor;
+mod highlighter;
 mod scene;
 mod watch;
 
