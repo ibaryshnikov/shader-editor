@@ -205,7 +205,7 @@ impl Highlight {
 }
 
 /// A highlighting theme.
-#[allow(missing_docs)]
+#[allow(missing_docs, unused)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Theme {
     SolarizedDark,

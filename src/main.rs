@@ -16,10 +16,14 @@ mod controls;
 mod editor;
 mod highlighter;
 mod scene;
+mod validator;
 mod watch;
 
-use controls::Controls;
+use controls::{Controls, Message};
 use editor::Editor;
+
+const SHADER_FILE: &str = "./shaders/pattern_2.wgsl";
+const SHADER_SOURCE: &str = include_str!("../shaders/pattern_2.wgsl");
 
 #[derive(Debug)]
 pub enum CustomEvent {
@@ -60,7 +64,6 @@ struct AppData {
     format: TextureFormat,
     config: wgpu::SurfaceConfiguration,
     editor: Editor,
-    engine: Engine,
     renderer: Renderer,
     state: program::State<Controls>,
     debug: Debug,
@@ -88,11 +91,19 @@ impl ApplicationHandler<CustomEvent> for App {
                 app_data.window.request_redraw();
             }
             CustomEvent::UpdateShader(text) => {
+                if let Err(e) = validator::validate(&text) {
+                    app_data.state.queue_message(Message::ShaderError(e));
+                    app_data.window.request_redraw();
+                    return;
+                } else {
+                    app_data.state.queue_message(Message::ShaderValid);
+                }
                 app_data.editor.update_rectangle_shader_with_text(
                     &app_data.device,
                     &app_data.config,
                     &text,
                 );
+                app_data.window.request_redraw();
             }
         }
     }
@@ -113,7 +124,6 @@ impl ApplicationHandler<CustomEvent> for App {
             queue,
             format,
             editor,
-            engine,
             renderer,
             state,
             debug,
@@ -195,11 +205,9 @@ impl ApplicationHandler<CustomEvent> for App {
 
                         editor.render(&view, &mut encoder);
 
+                        queue.submit([encoder.finish()]);
+
                         renderer.present(
-                            engine,
-                            device,
-                            queue,
-                            &mut encoder,
                             None,
                             frame.texture.format(),
                             &view,
@@ -207,7 +215,6 @@ impl ApplicationHandler<CustomEvent> for App {
                             &debug.overlay(),
                         );
 
-                        engine.submit(queue, encoder);
                         frame.present();
 
                         window.set_cursor(conversion::mouse_interaction(state.mouse_interaction()));
@@ -339,8 +346,8 @@ fn init_app(
     let controls = Controls::new(event_loop_proxy);
 
     let mut debug = Debug::new();
-    let engine = Engine::new(&adapter, &device, &queue, format, None);
-    let mut renderer = Renderer::new(&device, &engine, Font::default(), Pixels(16.0));
+    let engine = Engine::new(&adapter, device.clone(), queue.clone(), format, None);
+    let mut renderer = Renderer::new(engine, Font::default(), Pixels(16.0));
 
     let state = program::State::new(controls, viewport.logical_size(), &mut renderer, &mut debug);
 
@@ -354,10 +361,7 @@ fn init_app(
         queue,
         format,
         config,
-
         editor,
-
-        engine,
         renderer,
         state,
         debug,

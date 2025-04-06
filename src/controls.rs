@@ -1,18 +1,18 @@
 use iced_wgpu::Renderer;
-use iced_widget::{button, container, horizontal_space, text, text_editor, Column, Row};
+use iced_widget::{button, column, container, horizontal_space, row, text, text_editor};
 use iced_winit::core::{Element, Length, Theme};
 use iced_winit::runtime::{Program, Task};
 use iced_winit::winit;
 use winit::event_loop::EventLoopProxy;
 
-use crate::highlighter;
-use crate::CustomEvent;
+use crate::{highlighter, CustomEvent, SHADER_SOURCE};
 
 pub struct Controls {
     #[allow(unused)]
     event_loop_proxy: EventLoopProxy<CustomEvent>,
     content: text_editor::Content<<Controls as Program>::Renderer>,
     editor_visible: bool,
+    shader_error: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -20,15 +20,18 @@ pub enum Message {
     Edit(text_editor::Action),
     UpdateShader,
     ToggleEditor,
+    ShaderError(String),
+    ShaderValid,
 }
 
 impl Controls {
     pub fn new(event_loop_proxy: EventLoopProxy<CustomEvent>) -> Controls {
-        let content = text_editor::Content::with_text(include_str!("../shader.wgsl"));
+        let content = text_editor::Content::with_text(SHADER_SOURCE);
         Controls {
             event_loop_proxy,
             content,
             editor_visible: true,
+            shader_error: None,
         }
     }
 }
@@ -53,6 +56,12 @@ impl Program for Controls {
             Message::ToggleEditor => {
                 self.editor_visible = !self.editor_visible;
             }
+            Message::ShaderError(e) => {
+                self.shader_error = Some(e);
+            }
+            Message::ShaderValid => {
+                self.shader_error = None;
+            }
         }
         Task::none()
     }
@@ -73,31 +82,31 @@ impl Program for Controls {
                 |highlight, _theme| highlight.to_format(),
             );
 
-        let status_bar = Row::new().push(horizontal_space()).push(position);
+        let status_bar = row![horizontal_space(), position,];
 
-        let control_buttons = Row::new()
-            .push(
-                button("Toggle editor")
-                    .on_press(Message::ToggleEditor)
-                    .width(Length::Fill)
-                    .style(button::secondary),
-            )
-            .push(
-                button("Update shader")
-                    .on_press(Message::UpdateShader)
-                    .width(Length::Fill)
-                    .style(button::secondary),
-            )
-            .spacing(1)
-            .padding(1);
+        let control_buttons = row![
+            button("Toggle editor")
+                .on_press(Message::ToggleEditor)
+                .width(Length::Fill)
+                .style(button::secondary),
+            button("Update shader")
+                .on_press(Message::UpdateShader)
+                .width(Length::Fill)
+                .style(button::secondary),
+        ]
+        .spacing(1)
+        .padding(1);
 
-        let mut column = Column::new().push(control_buttons);
+        let mut column = column![control_buttons];
 
         if self.editor_visible {
             column = column.push(editor).push(status_bar);
         }
+        if let Some(error) = &self.shader_error {
+            column = column.push(text(error));
+        }
 
-        container(column).width(400).style(add_background).into()
+        container(column).width(500).style(add_background).into()
     }
 }
 

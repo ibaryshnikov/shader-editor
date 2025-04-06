@@ -3,18 +3,19 @@ use iced_wgpu::wgpu::{
     RenderPipelineDescriptor, SurfaceConfiguration,
 };
 
+use super::rectangle::TrianglePoint;
+use crate::SHADER_FILE;
+
 pub struct PipelineData {
     pub pipeline_layout: PipelineLayout,
     pub pipeline: RenderPipeline,
 }
 
-use super::rectangle::TrianglePoint;
-
 const VERTEX_SIZE: usize = std::mem::size_of::<TrianglePoint>();
 
 impl PipelineData {
     pub fn new(device: &Device, config: &SurfaceConfiguration) -> Self {
-        let shader_text = std::fs::read_to_string("shader.wgsl").expect("Should read the shader");
+        let shader_text = std::fs::read_to_string(SHADER_FILE).expect("Should read the shader");
 
         Self::new_with_text(device, config, &shader_text)
     }
