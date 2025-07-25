@@ -1,16 +1,14 @@
 use iced_wgpu::Renderer;
 use iced_widget::{button, column, container, horizontal_space, row, text, text_editor};
 use iced_winit::core::{Element, Length, Theme};
-use iced_winit::runtime::{Program, Task};
 use iced_winit::winit;
 use winit::event_loop::EventLoopProxy;
 
-use crate::{highlighter, CustomEvent, SHADER_SOURCE};
+use crate::{CustomEvent, SHADER_SOURCE, highlighter};
 
 pub struct Controls {
-    #[allow(unused)]
     event_loop_proxy: EventLoopProxy<CustomEvent>,
-    content: text_editor::Content<<Controls as Program>::Renderer>,
+    content: text_editor::Content<Renderer>,
     editor_visible: bool,
     shader_error: Option<String>,
 }
@@ -34,14 +32,8 @@ impl Controls {
             shader_error: None,
         }
     }
-}
 
-impl Program for Controls {
-    type Renderer = Renderer;
-    type Theme = Theme;
-    type Message = Message;
-
-    fn update(&mut self, message: Message) -> Task<Message> {
+    pub fn update(&mut self, message: Message) {
         match message {
             Message::Edit(action) => {
                 self.content.perform(action);
@@ -50,7 +42,7 @@ impl Program for Controls {
                 let shader_text = self.content.text();
                 let event = CustomEvent::UpdateShader(shader_text);
                 if let Err(e) = self.event_loop_proxy.send_event(event) {
-                    println!("Error sending UpdateShader event: {}", e);
+                    println!("Error sending UpdateShader event: {e}");
                 }
             }
             Message::ToggleEditor => {
@@ -63,10 +55,9 @@ impl Program for Controls {
                 self.shader_error = None;
             }
         }
-        Task::none()
     }
 
-    fn view(&self) -> Element<Message, Theme, Renderer> {
+    pub fn view(&self) -> Element<'_, Message, Theme, Renderer> {
         let position = {
             let (line, column) = self.content.cursor_position();
             text(format!("{}:{}", line + 1, column + 1))

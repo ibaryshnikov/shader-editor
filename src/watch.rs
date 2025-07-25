@@ -24,7 +24,7 @@ pub fn init(event_loop_proxy: EventLoopProxy<CustomEvent>) {
                         .send_event(CustomEvent::UpdateShader(shader_text))
                         .expect("Should send custom winit event");
                 }
-                Err(e) => println!("watch error: {:?}", e),
+                Err(e) => println!("watch error: {e:?}"),
             }
         }
     });

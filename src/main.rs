@@ -1,14 +1,16 @@
 use std::sync::Arc;
+use std::time::Instant;
 
 use iced_wgpu::graphics::Viewport;
-use iced_wgpu::{wgpu, Engine, Renderer};
-use iced_winit::core::{mouse, renderer, Font, Pixels, Size, Theme};
-use iced_winit::runtime::{program, Debug};
-use iced_winit::{conversion, winit, Clipboard};
+use iced_wgpu::{Engine, Renderer, wgpu};
+use iced_winit::core::window;
+use iced_winit::core::{Event, Font, Pixels, Size, Theme, mouse, renderer};
+use iced_winit::runtime::user_interface::{self, UserInterface};
+use iced_winit::{Clipboard, conversion, winit};
 use wgpu_types::TextureFormat;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, KeyEvent, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
+use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
 use winit::window::Window;
 
@@ -32,22 +34,26 @@ pub enum CustomEvent {
 }
 
 struct App {
-    event_loop_proxy: EventLoopProxy<CustomEvent>,
     app_data: Option<AppData>,
     resized: bool,
-    cursor_position: Option<winit::dpi::PhysicalPosition<f64>>,
+    cursor: mouse::Cursor,
     modifiers: ModifiersState,
+    events: Vec<Event>,
+    cache: user_interface::Cache,
+    controls: Controls,
 }
 
 impl App {
-    fn new(event_loop_proxy: EventLoopProxy<CustomEvent>) -> App {
+    fn new(controls: Controls) -> App {
         let modifiers = ModifiersState::default();
         App {
-            event_loop_proxy,
             app_data: None,
             resized: false,
-            cursor_position: None,
+            cursor: mouse::Cursor::Unavailable,
             modifiers,
+            events: Vec::new(),
+            cache: user_interface::Cache::new(),
+            controls,
         }
     }
 }
@@ -65,8 +71,6 @@ struct AppData {
     config: wgpu::SurfaceConfiguration,
     editor: Editor,
     renderer: Renderer,
-    state: program::State<Controls>,
-    debug: Debug,
 }
 
 impl ApplicationHandler<CustomEvent> for App {
@@ -75,7 +79,7 @@ impl ApplicationHandler<CustomEvent> for App {
             println!("Already initialized, skipping");
             return;
         }
-        let app_data = init_app(event_loop, self.event_loop_proxy.clone());
+        let app_data = init_app(event_loop);
         self.app_data = Some(app_data);
     }
 
@@ -92,11 +96,11 @@ impl ApplicationHandler<CustomEvent> for App {
             }
             CustomEvent::UpdateShader(text) => {
                 if let Err(e) = validator::validate(&text) {
-                    app_data.state.queue_message(Message::ShaderError(e));
+                    self.controls.update(Message::ShaderError(e));
                     app_data.window.request_redraw();
                     return;
                 } else {
-                    app_data.state.queue_message(Message::ShaderValid);
+                    self.controls.update(Message::ShaderValid);
                 }
                 app_data.editor.update_rectangle_shader_with_text(
                     &app_data.device,
@@ -125,14 +129,15 @@ impl ApplicationHandler<CustomEvent> for App {
             format,
             editor,
             renderer,
-            state,
-            debug,
             ..
         } = app_data;
 
         match event {
             WindowEvent::CursorMoved { position, .. } => {
-                self.cursor_position = Some(position);
+                self.cursor = mouse::Cursor::Available(conversion::cursor_position(
+                    position,
+                    app_data.viewport.scale_factor(),
+                ));
             }
             WindowEvent::ModifiersChanged(modifiers) => {
                 self.modifiers = modifiers.state();
@@ -151,12 +156,9 @@ impl ApplicationHandler<CustomEvent> for App {
                 }
                 PhysicalKey::Code(KeyCode::KeyR) => {
                     if self.modifiers.control_key() {
-                        state.queue_message(controls::Message::UpdateShader);
+                        self.controls.update(controls::Message::UpdateShader);
                         return;
                     }
-                }
-                PhysicalKey::Code(KeyCode::F12) => {
-                    debug.toggle();
                 }
                 _ => (),
             },
@@ -207,17 +209,44 @@ impl ApplicationHandler<CustomEvent> for App {
 
                         queue.submit([encoder.finish()]);
 
-                        renderer.present(
-                            None,
-                            frame.texture.format(),
-                            &view,
-                            &app_data.viewport,
-                            &debug.overlay(),
+                        let mut interface = UserInterface::build(
+                            self.controls.view(),
+                            app_data.viewport.logical_size(),
+                            std::mem::take(&mut self.cache),
+                            renderer,
                         );
 
-                        frame.present();
+                        let (state, _) = interface.update(
+                            &[Event::Window(
+                                window::Event::RedrawRequested(Instant::now()),
+                            )],
+                            self.cursor,
+                            renderer,
+                            clipboard,
+                            &mut Vec::new(),
+                        );
 
-                        window.set_cursor(conversion::mouse_interaction(state.mouse_interaction()));
+                        if let user_interface::State::Updated {
+                            mouse_interaction, ..
+                        } = state
+                        {
+                            window.set_cursor(conversion::mouse_interaction(mouse_interaction));
+                        }
+
+                        let theme = Theme::SolarizedDark;
+                        interface.draw(
+                            renderer,
+                            &theme,
+                            &renderer::Style {
+                                text_color: theme.palette().text,
+                            },
+                            self.cursor,
+                        );
+                        self.cache = interface.into_cache();
+
+                        renderer.present(None, frame.texture.format(), &view, &app_data.viewport);
+
+                        frame.present();
                     }
                     Err(error) => match error {
                         wgpu::SurfaceError::OutOfMemory => {
@@ -234,36 +263,41 @@ impl ApplicationHandler<CustomEvent> for App {
 
         if let Some(event) = conversion::window_event(event, window.scale_factor(), self.modifiers)
         {
-            state.queue_event(event);
+            self.events.push(event);
         }
 
-        if state.is_queue_empty() {
+        if self.events.is_empty() {
             return;
         }
-        let theme = Theme::SolarizedDark;
-        let _ = state.update(
+        let mut interface = UserInterface::build(
+            self.controls.view(),
             app_data.viewport.logical_size(),
-            self.cursor_position
-                .map(|p| conversion::cursor_position(p, app_data.viewport.scale_factor()))
-                .map(mouse::Cursor::Available)
-                .unwrap_or(mouse::Cursor::Unavailable),
+            std::mem::take(&mut self.cache),
             renderer,
-            &theme,
-            &renderer::Style {
-                text_color: theme.palette().text,
-            },
-            clipboard,
-            debug,
         );
+
+        let mut messages = Vec::new();
+
+        let _ = interface.update(
+            &self.events,
+            self.cursor,
+            renderer,
+            clipboard,
+            &mut messages,
+        );
+
+        self.events.clear();
+        self.cache = interface.into_cache();
+
+        for message in messages {
+            self.controls.update(message);
+        }
 
         window.request_redraw();
     }
 }
 
-fn init_app(
-    event_loop: &ActiveEventLoop,
-    event_loop_proxy: EventLoopProxy<CustomEvent>,
-) -> AppData {
+fn init_app(event_loop: &ActiveEventLoop) -> AppData {
     let window = event_loop
         .create_window(winit::window::WindowAttributes::default())
         .expect("Should create window");
@@ -304,15 +338,13 @@ fn init_app(
             .expect("Format not found");
 
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: None,
-                    required_features: adapter_features & wgpu::Features::default(),
-                    required_limits: needed_limits,
-                    memory_hints: wgpu::MemoryHints::MemoryUsage,
-                },
-                None,
-            )
+            .request_device(&wgpu::DeviceDescriptor {
+                label: None,
+                required_features: adapter_features & wgpu::Features::default(),
+                required_limits: needed_limits,
+                memory_hints: wgpu::MemoryHints::MemoryUsage,
+                trace: wgpu::Trace::Off,
+            })
             .await
             .expect("Device not found");
 
@@ -343,13 +375,8 @@ fn init_app(
 
     let editor = Editor::init(&config, &device);
 
-    let controls = Controls::new(event_loop_proxy);
-
-    let mut debug = Debug::new();
     let engine = Engine::new(&adapter, device.clone(), queue.clone(), format, None);
-    let mut renderer = Renderer::new(engine, Font::default(), Pixels(16.0));
-
-    let state = program::State::new(controls, viewport.logical_size(), &mut renderer, &mut debug);
+    let renderer = Renderer::new(engine, Font::default(), Pixels(16.0));
 
     AppData {
         window,
@@ -363,8 +390,6 @@ fn init_app(
         config,
         editor,
         renderer,
-        state,
-        debug,
     }
 }
 
@@ -374,8 +399,9 @@ fn main() {
         .expect("Should build event loop");
 
     let event_loop_proxy = event_loop.create_proxy();
+    let controls = Controls::new(event_loop_proxy.clone());
 
-    let mut app = App::new(event_loop_proxy.clone());
+    let mut app = App::new(controls);
 
     // watch for shader changes
     watch::init(event_loop_proxy);

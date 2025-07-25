@@ -6,10 +6,12 @@ of the rendered image.
 
 Syntax highlight is kindly borrowed from [halo](https://github.com/bungoboingo/halo)
 
+
 ## Motivation
 
 The main goal is to provide a quick way to develop shaders with
 a fast iteration loop. Inspired by tools like shadertoy.
+
 
 ## Usage
 
@@ -21,9 +23,11 @@ Editor:
 File watcher:
 - edit `shader.wgsl` file, it will be reloaded on changes
 
+
 ## Preview
 
 <img alt="preview" src="editor.png">
+
 
 ## Roadmap
 
@@ -31,11 +35,12 @@ File watcher:
 - [ ] Menu dialog to open shader files
 - [x] Multiline text editor for shaders
 - [x] Syntax highlight
-- [ ] Show error position inside editor
+- [x] Validation
+
 
 ## Details
 
-The implementation is based on the following examples:
+Implementation is based on the following examples:
 - iced [integration](https://github.com/iced-rs/iced/tree/master/examples/integration)
 - wgpu [cube](https://github.com/gfx-rs/wgpu/tree/trunk/examples/cube)
   and [hello-triangle](https://github.com/gfx-rs/wgpu/tree/trunk/examples/hello-triangle).
