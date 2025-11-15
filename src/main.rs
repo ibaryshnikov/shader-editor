@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use iced_wgpu::graphics::Viewport;
+use iced_wgpu::graphics::{Shell, Viewport};
 use iced_wgpu::{Engine, Renderer, wgpu};
 use iced_winit::core::window;
 use iced_winit::core::{Event, Font, Pixels, Size, Theme, mouse, renderer};
@@ -174,7 +174,7 @@ impl ApplicationHandler<CustomEvent> for App {
 
                     app_data.viewport = Viewport::with_physical_size(
                         Size::new(size.width, size.height),
-                        window.scale_factor(),
+                        window.scale_factor() as f32,
                     );
 
                     surface.configure(
@@ -261,7 +261,8 @@ impl ApplicationHandler<CustomEvent> for App {
             _ => (),
         }
 
-        if let Some(event) = conversion::window_event(event, window.scale_factor(), self.modifiers)
+        if let Some(event) =
+            conversion::window_event(event, window.scale_factor() as f32, self.modifiers)
         {
             self.events.push(event);
         }
@@ -344,6 +345,7 @@ fn init_app(event_loop: &ActiveEventLoop) -> AppData {
                 required_limits: needed_limits,
                 memory_hints: wgpu::MemoryHints::MemoryUsage,
                 trace: wgpu::Trace::Off,
+                experimental_features: wgpu::ExperimentalFeatures::disabled(),
             })
             .await
             .expect("Device not found");
@@ -369,13 +371,20 @@ fn init_app(event_loop: &ActiveEventLoop) -> AppData {
     println!("height {}", physical_size.height);
     let viewport = Viewport::with_physical_size(
         Size::new(physical_size.width, physical_size.height),
-        window.scale_factor(),
+        window.scale_factor() as f32,
     );
     let clipboard = Clipboard::connect(window.clone());
 
     let editor = Editor::init(&config, &device);
 
-    let engine = Engine::new(&adapter, device.clone(), queue.clone(), format, None);
+    let engine = Engine::new(
+        &adapter,
+        device.clone(),
+        queue.clone(),
+        format,
+        None,
+        Shell::headless(),
+    );
     let renderer = Renderer::new(engine, Font::default(), Pixels(16.0));
 
     AppData {

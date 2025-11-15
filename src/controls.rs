@@ -1,5 +1,5 @@
 use iced_wgpu::Renderer;
-use iced_widget::{button, column, container, horizontal_space, row, text, text_editor};
+use iced_widget::{button, column, container, row, space, text, text_editor};
 use iced_winit::core::{Element, Length, Theme};
 use iced_winit::winit;
 use winit::event_loop::EventLoopProxy;
@@ -73,7 +73,7 @@ impl Controls {
                 |highlight, _theme| highlight.to_format(),
             );
 
-        let status_bar = row![horizontal_space(), position,];
+        let status_bar = row![space::horizontal(), position];
 
         let control_buttons = row![
             button("Toggle editor")
