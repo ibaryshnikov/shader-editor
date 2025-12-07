@@ -13,27 +13,17 @@ syntect = "5.3.0"
 wgpu-types = "27.0"
 
 [dependencies.iced]
-# version = "0.14"
-git = "https://github.com/iced-rs/iced.git"
-rev = "41d930b"
+version = "0.14"
 features = ["highlighter", "tokio", "debug", "advanced"]
 
 [dependencies.iced_core]
-# version = "0.14"
-git = "https://github.com/iced-rs/iced.git"
-rev = "41d930b"
+version = "0.14"
 
 [dependencies.iced_widget]
-# version = "0.14"
-git = "https://github.com/iced-rs/iced.git"
-rev = "41d930b"
+version = "0.14"
 
 [dependencies.iced_wgpu]
-# version = "0.14"
-git = "https://github.com/iced-rs/iced.git"
-rev = "41d930b"
+version = "0.14"
 
 [dependencies.iced_winit]
-# version = "0.14"
-git = "https://github.com/iced-rs/iced.git"
-rev = "41d930b"
+version = "0.14"

@@ -230,7 +230,12 @@ impl ApplicationHandler<CustomEvent> for App {
                             mouse_interaction, ..
                         } = state
                         {
-                            window.set_cursor(conversion::mouse_interaction(mouse_interaction));
+                            if let Some(icon) = conversion::mouse_interaction(mouse_interaction) {
+                                window.set_cursor(icon);
+                                window.set_cursor_visible(true);
+                            } else {
+                                window.set_cursor_visible(false);
+                            }
                         }
 
                         let theme = Theme::SolarizedDark;

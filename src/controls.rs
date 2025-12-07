@@ -59,8 +59,12 @@ impl Controls {
 
     pub fn view(&self) -> Element<'_, Message, Theme, Renderer> {
         let position = {
-            let (line, column) = self.content.cursor_position();
-            text(format!("{}:{}", line + 1, column + 1))
+            let cursor = self.content.cursor();
+            text(format!(
+                "{}:{}",
+                cursor.position.line + 1,
+                cursor.position.column + 1
+            ))
         };
 
         let editor = text_editor(&self.content)
